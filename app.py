@@ -12,7 +12,6 @@ st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-colo
 # --- CORE DATABASE FILE PATH ---
 DB_FILE = "options_master_ledger.csv"
 
-# REQUIRED STRUCTURAL COLUMNS FOR THE ENGINE
 REQUIRED_COLUMNS = [
     "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
     "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
@@ -24,12 +23,13 @@ def load_data():
     if os.path.exists(DB_FILE):
         try:
             df = pd.read_csv(DB_FILE)
-            # 🛡️ THE AUTO-REPAIR ENGINE: Check for and insert any missing columns dynamically
+            
+            # Auto-repair missing columns dynamically
             mutated = False
             for col in REQUIRED_COLUMNS:
                 if col not in df.columns:
                     if col == "Expiration Date":
-                        df[col] = (pd.to_datetime(df['Entry Date']) + pd.Timedelta(days=40)).dt.strftime('%Y-%m-%d')
+                        df[col] = datetime.now().strftime('%Y-%m-%d')
                     elif col == "Contracts":
                         df[col] = 1
                     elif col in ["Short Strike", "Long Strike", "Exit Cost ($)", "Realized PnL ($)"]:
@@ -39,11 +39,9 @@ def load_data():
                     mutated = True
             if mutated:
                 df.to_csv(DB_FILE, index=False)
-            
-            df['Entry Date'] = pd.to_datetime(df['Entry Date'])
+                
             return df
         except Exception as e:
-            st.error(f"Database error auto-repaired. Resetting framework file. Technical note: {e}")
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
     else:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
@@ -51,10 +49,10 @@ def load_data():
 def save_trade(trade_dict):
     df = load_data()
     new_row = pd.DataFrame([trade_dict])
-    new_row['Entry Date'] = pd.to_datetime(new_row['Entry Date'])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
 
+# Load master trade log safely
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
@@ -88,10 +86,15 @@ with tab1:
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
-    # Math processing
+    # Core Logic Processing
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
-    calculated_dte = max(int((exp_date - entry_date).days), 1)
+    
+    # Clean string calculations to avoid formatting runtime bugs
+    e_dt = datetime.combine(entry_date, datetime.min.time())
+    ex_dt = datetime.combine(exp_date, datetime.min.time())
+    calculated_dte = max(int((ex_dt - e_dt).days), 1)
+    
     flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
     abs_premium_value = abs(total_premium_value)
 
@@ -128,6 +131,7 @@ with tab1:
         }
         save_trade(trade_data)
         st.success(f"Successfully appended {strategy} execution data into your cloud repository.")
+        st.write("Refreshing data vault...")
         st.rerun()
 
 # ==========================================
@@ -158,33 +162,37 @@ with tab2:
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
     
+    # 🌟 PERMANENT FIX: RENDER EXCLUSIVE TABLE SEPARATION GUARANTEE FIRST
+    st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
-        st.info("No recorded trades found in history database. Input an active contract in Tab 1 to fill log.")
+        # Pre-rendering visual headers even on blank environments to preserve screen alignment
+        st.dataframe(pd.DataFrame(columns=["Performance", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
+        st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
     else:
-        # 🌟 FEATURE UPGRADE: RE-POSITIONED MANAGEMENT ENGINE ON TOP FOR INTUITIVE ACCESS
-        open_positions = trade_df[trade_df["Status"] == "Open"]
+        # Safety formatting copy
+        presentation_df = trade_df.copy()
         
-        st.markdown("### ⚙️ Active Order Management Control Center")
+        badges = []
+        for idx, row in presentation_df.iterrows():
+            if str(row["Status"]).strip().upper() == "OPEN":
+                badges.append("🔵 OPEN")
+            elif float(row["Realized PnL ($)"]) >= 0:
+                badges.append("🟢 WIN")
+            else:
+                badges.append("🔴 LOSS")
+        presentation_df.insert(0, "📊 Performance", badges)
+        
+        col_order = ["📊 Performance", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
+        st.dataframe(presentation_df[col_order], use_container_width=True)
+        
+        csv_data = trade_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
+        
+        st.markdown("---")
+        
+        # MANAGEMENT PORTAL ENGINE BLOCK
+        open_positions = trade_df[trade_df["Status"] == "Open"]
+        st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
-            selected_idx = st.selectbox(
-                "Select a Working Position to Close Out / Realize Returns:", 
-                options=open_positions.index,
-                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']:.0f})"
-            )
-            
-            c_col1, c_col2, c_col3 = st.columns(3)
-            with c_col1:
-                short_prem_exit = st.number_input("Short Leg Close Price ($) [0 if expired worthless]", min_value=0.00, value=0.00, step=0.05)
-            with c_col2:
-                long_prem_exit = st.number_input("Long Leg Close Price ($) [0 if expired worthless]", min_value=0.00, value=0.00, step=0.05)
-            with c_col3:
-                close_date = st.date_input("Execution Close Date", datetime.now())
-                
-            if st.button("🏁 Execute Close Order & Calculate Realized Performance"):
-                raw_df = pd.read_csv(DB_FILE)
-                initial_net_premium = float(raw_df.loc[selected_idx, "Net Premium ($)"])
-                capital = float(raw_df.loc[selected_idx, "Capital Risked"])
-                trade_flow = raw_df.loc[selected_idx, "Flow Type"]
-                saved_contracts = float(raw_df.loc[selected_idx, "Contracts"])
