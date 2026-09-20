@@ -8,12 +8,7 @@ from datetime import datetime
 st.set_page_config(page_title="Premium Seller Dashboard", layout="wide", page_icon="📈")
 
 # Style adjustments for scannability
-st.markdown("""
-    <style>
-    .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
-    .stButton>button { width: 100%; background-color: #4CAF50; color: white; }
-    </style>
-""", unsafe_allowed_html=True)
+st.markdown("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #4CAF50; color: white; }</style>", unsafe_allowed_html=True)
 
 # --- DATABASE / CSV ENGINE ---
 DB_FILE = "options_trade_log.csv"
