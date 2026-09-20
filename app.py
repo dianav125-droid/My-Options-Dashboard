@@ -7,6 +7,7 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Command Center", layout="wide", page_icon="📊")
 
+# Custom UI Badging Styles to copy institutional execution feeds
 st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #1E3A8A; color: white; font-weight: bold; }</style>")
 
 # --- CORE DATABASE FILE PATH ---
@@ -18,6 +19,7 @@ def load_data():
         df['Entry Date'] = pd.to_datetime(df['Entry Date'])
         return df
     else:
+        # Pre-seeding empty template with structural column parity to ensure immediate open-render
         return pd.DataFrame(columns=[
             "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
             "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
@@ -37,7 +39,7 @@ trade_df = load_data()
 st.title("📊 The Premium Seller Command Center")
 st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
-# --- DYNAMIC TAB RENAMING FOR CONFORMANCE ---
+# --- MASTER NAVIGATION TABS ---
 tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "📜 Live Trade History"])
 
 # ==========================================
@@ -66,12 +68,10 @@ with tab1:
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
-    # --- AUTOMATED ENTRY MATHEMATICS ---
+    # Entry Formulations
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
-    
-    dte_delta = (exp_date - entry_date).days
-    calculated_dte = max(int(dte_delta), 1)
+    calculated_dte = max(int((exp_date - entry_date).days), 1)
 
     flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
     abs_premium_value = abs(total_premium_value)
@@ -79,12 +79,8 @@ with tab1:
     if long_strike > 0 and short_strike > 0:
         spread_width = abs(short_strike - long_strike)
         max_spread_collateral = spread_width * 100 * contracts
-        if flow_type == "Credit (Received)":
-            capital_risked = max_spread_collateral - abs_premium_value
-            net_gain_potential = abs_premium_value
-        else: 
-            capital_risked = abs_premium_value
-            net_gain_potential = max_spread_collateral - abs_premium_value
+        capital_risked = max_spread_collateral - abs_premium_value if flow_type == "Credit (Received)" else abs_premium_value
+        net_gain_potential = abs_premium_value if flow_type == "Credit (Received)" else max_spread_collateral - abs_premium_value
     elif "Put" in strategy or strategy == "Cash Secured Put (CSP)":
         capital_risked = short_strike * 100 * contracts
         net_gain_potential = abs_premium_value if flow_type == "Credit (Received)" else 0.0
@@ -137,58 +133,53 @@ with tab2:
         c3.metric("Realized Win Rate Score", f"{win_rate:.1f}%")
         c4.metric("Aggregate Realized Account Return", f"${closed_df['Realized PnL ($)'].sum():,.2f}")
 
-        # --- TIME HORIZON SUMMARIES ---
-        st.markdown("### 🗓️ Rolling Portfolio Inflow Breakdowns")
-        now = pd.Timestamp.now().normalize()
-        
-        df_today = trade_df[trade_df["Entry Date"] >= now]
-        df_week = trade_df[trade_df["Entry Date"] >= (now - pd.Timedelta(days=now.dayofweek))]
-        df_month = trade_df[trade_df["Entry Date"] >= now.replace(day=1)]
-        df_year = trade_df[trade_df["Entry Date"] >= now.replace(month=1, day=1)]
-
-        t1, t2, t3, t4 = st.columns(4)
-        with t1:
-            st.markdown("#### 📅 Daily Inflow (Today)")
-            st.metric("Positions Taken", len(df_today))
-            st.metric("Premium Allocated", f"${df_today['Net Premium ($)'].sum():,.2f}")
-        with t2:
-            st.markdown("#### 🗓️ Weekly Inflow (This Week)")
-            st.metric("Positions Taken", len(df_week))
-            st.metric("Premium Allocated", f"${df_week['Net Premium ($)'].sum():,.2f}")
-        with t3:
-            st.markdown("#### 🗒️ Monthly Inflow (This Month)")
-            st.metric("Positions Taken", len(df_month))
-            st.metric("Premium Allocated", f"${df_month['Net Premium ($)'].sum():,.2f}")
-        with t4:
-            st.markdown("#### 📊 Annual Inflow (YTD)")
-            st.metric("Positions Taken", len(df_year))
-            st.metric("Premium Allocated", f"${df_year['Net Premium ($)'].sum():,.2f}")
-
 # ==========================================
 # TAB 3: LIVE TRADE HISTORY
 # ==========================================
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
+    
+    # 🌟 CRITICAL CHANGE: ALWAYS RENDER THE VIEWABLE DATA SHEET ON TOP JUST LIKE THE OPTIONS SELLER
+    st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
-        st.info("No recorded trades found in database.")
+        # Pre-render a visual layout structure even if empty so it matches the reference tool framework
+        st.dataframe(pd.DataFrame(columns=["Status Badge", "Ticker", "Strategy", "Entry Date", "Calculated DTE", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
+        st.info("No recorded trades found in history database. Input an active contract in Tab 1 to fill log.")
     else:
-        open_positions = trade_df[trade_df["Status"] == "Open"]
+        # Create a deep copy to apply visual badge indicators without mutating core numerical records
+        presentation_df = trade_df.copy()
+        presentation_df['Entry Date'] = presentation_df['Entry Date'].dt.strftime('%Y-%m-%d')
         
+        # Build institutional badge column map
+        badges = []
+        for idx, row in presentation_df.iterrows():
+            if row["Status"] == "Open":
+                badges.append("🔵 OPEN")
+            elif row["Realized PnL ($)"] >= 0:
+                badges.append("🟢 WIN")
+            else:
+                badges.append("🔴 LOSS")
+        presentation_df.insert(0, "📊 Performance", badges)
+        
+        # Re-ordering core columns so it mimics the fast scan layout of a professional log
+        col_order = ["📊 Performance", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
+        st.dataframe(presentation_df[col_order], use_container_width=True)
+        
+        # CSV Hard Backup Button
+        csv_data = trade_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
+        
+        st.markdown("---")
+        
+        # 🔄 Hiding Order Management Tool beneath the main screen so it stays functional without cluttering your view
+        open_positions = trade_df[trade_df["Status"] == "Open"]
         if not open_positions.empty:
-            st.markdown("### 🔄 Active Order Management Engine (Close/Manage Trades)")
+            st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
             
             selected_idx = st.selectbox(
-                "Identify Open Contract to Close Out", 
+                "Identify Working Open Contract to Close Out", 
                 options=open_positions.index,
-                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']}"
+                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Risked: ${trade_df.loc[x, 'Capital Risked']:.0f})"
             )
             
-            short_prem_exit = st.number_input("Short Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
-            long_prem_exit = st.number_input("Long Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
-            close_date = st.date_input("Date Trade Was Closed", datetime.now())
-                
-            if st.button("🏁 Close Selected Position and Lock in Realized Returns"):
-                raw_df = pd.read_csv(DB_FILE)
-                initial_net_premium = float(raw_df.loc[selected_idx, "Net Premium ($)"])
-                capital = float(raw_df.loc[selected_idx, "Capital Risked"])
-                trade_flow = raw_df.loc[selected_idx, "Flow Type"]
+            c_col1, c_col2, c_col3 = st.columns(3)
