@@ -23,8 +23,6 @@ def load_data():
     if os.path.exists(DB_FILE):
         try:
             df = pd.read_csv(DB_FILE)
-            
-            # Auto-repair missing columns dynamically
             mutated = False
             for col in REQUIRED_COLUMNS:
                 if col not in df.columns:
@@ -39,7 +37,6 @@ def load_data():
                     mutated = True
             if mutated:
                 df.to_csv(DB_FILE, index=False)
-                
             return df
         except Exception as e:
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
@@ -90,7 +87,6 @@ with tab1:
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
     
-    # Clean string calculations to avoid formatting runtime bugs
     e_dt = datetime.combine(entry_date, datetime.min.time())
     ex_dt = datetime.combine(exp_date, datetime.min.time())
     calculated_dte = max(int((ex_dt - e_dt).days), 1)
@@ -131,7 +127,6 @@ with tab1:
         }
         save_trade(trade_data)
         st.success(f"Successfully appended {strategy} execution data into your cloud repository.")
-        st.write("Refreshing data vault...")
         st.rerun()
 
 # ==========================================
@@ -145,7 +140,6 @@ with tab2:
         total_count = len(trade_df)
         open_df = trade_df[trade_df["Status"] == "Open"]
         closed_df = trade_df[trade_df["Status"] == "Closed"]
-        
         winning_trades = len(closed_df[closed_df["Realized PnL ($)"] >= 0])
         total_closed = len(closed_df)
         win_rate = (winning_trades / total_closed * 100) if total_closed > 0 else 100.0
@@ -161,15 +155,13 @@ with tab2:
 # ==========================================
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
-    
-    # 📋 ALWAYS DISPLAY THE VIEWABLE DATA SHEET AT THE TOP
     st.markdown("### 📋 Active Master History Log Sheet")
+    
     if trade_df.empty:
         st.dataframe(pd.DataFrame(columns=["Performance", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
     else:
         presentation_df = trade_df.copy()
-        
         badges = []
         for idx, row in presentation_df.iterrows():
             if str(row["Status"]).strip().upper() == "OPEN":
@@ -185,14 +177,14 @@ with tab3:
         
         csv_data = trade_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
-        
         st.markdown("---")
         
-        # MANAGEMENT PORTAL ENGINE BLOCK
         open_positions = trade_df[trade_df["Status"] == "Open"]
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
+        
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
-            # Fixed variable selector formatting to strictly prevent unclosed bracket runtime syntax bugs
-            selected_idx = st.selectbox(
+            # Rebuilt selection variable entirely outside any multi-column layout functions to force-break bracket compiler anomalies
+            working_labels = [f"${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Collected: ${trade_df.loc[x, 'Net Premium ($)']:.0f})" for x in open_positions.index]
+            selected_label = st.selectbox("Identify Working Open Contract to Close Out", options=working_labels)
