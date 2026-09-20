@@ -19,7 +19,7 @@ def load_data():
         return df
     else:
         return pd.DataFrame(columns=[
-            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", 
+            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
             "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
             "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
             "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
@@ -37,7 +37,8 @@ trade_df = load_data()
 st.title("📊 The Premium Seller Command Center")
 st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
-tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "🗂️ Unrestricted Master Ledger"])
+# --- DYNAMIC TAB RENAMING FOR CONFORMANCE ---
+tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "📜 Live Trade History"])
 
 # ==========================================
 # TAB 1: AUTOMATED TRADE CALCULATOR
@@ -57,8 +58,8 @@ with tab1:
         long_strike = st.number_input("Long Strike Price ($) [Leave 0 if naked]", min_value=0.0, value=95.0, step=0.5)
         
     with col3:
-        short_prem_entry = st.number_input("Short Leg Entry Premium ($)", min_value=0.00, value=1.50, step=0.05, help="Fidelity 'Sell to Open' price.")
-        long_prem_entry = st.number_input("Long Leg Entry Premium ($) [0 if naked]", min_value=0.00, value=0.50, step=0.05, help="Fidelity 'Buy to Open' price. Set to 0 if a single CSP or Covered Call.")
+        short_prem_entry = st.number_input("Short Leg Entry Premium ($)", min_value=0.00, value=1.50, step=0.05)
+        long_prem_entry = st.number_input("Long Leg Entry Premium ($) [0 if naked]", min_value=0.00, value=0.50, step=0.05)
         entry_date = st.date_input("Execution Date (Today)", datetime.now())
         exp_date = st.date_input("Contract Expiration Date", datetime.now() + pd.Timedelta(days=40))
         
@@ -69,15 +70,12 @@ with tab1:
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
     
-    # Calculate automated DTE
     dte_delta = (exp_date - entry_date).days
     calculated_dte = max(int(dte_delta), 1)
 
-    # Automatically determine Flow Type behind the scenes
     flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
     abs_premium_value = abs(total_premium_value)
 
-    # Compute Capital Risk / Collateral Requirements dynamically based on strikes
     if long_strike > 0 and short_strike > 0:
         spread_width = abs(short_strike - long_strike)
         max_spread_collateral = spread_width * 100 * contracts
@@ -107,7 +105,8 @@ with tab1:
     if st.button("💾 Commit Options Contract Order to Ledger File"):
         trade_data = {
             "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Flow Type": flow_type, "Status": "Open", 
-            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Contracts": int(contracts), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
+            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Expiration Date": exp_date.strftime('%Y-%m-%d'),
+            "Contracts": int(contracts), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
             "Calculated DTE": int(calculated_dte), "Close DTE": 0, "Capital Risked": float(capital_risked), 
             "Net Premium ($)": float(total_premium_value), "Exit Cost ($)": 0.0, "IV (%)": float(iv_pct), 
             "Realized PnL ($)": 0.0, "ROI (%)": round(roi, 2), "Annualized Return (%)": round(annualized_return, 2)
@@ -166,10 +165,10 @@ with tab2:
             st.metric("Premium Allocated", f"${df_year['Net Premium ($)'].sum():,.2f}")
 
 # ==========================================
-# TAB 3: UNRESTRICTED MASTER LEDGER
+# TAB 3: LIVE TRADE HISTORY
 # ==========================================
 with tab3:
-    st.subheader("🗂️ Live Master Options Vault Ledger")
+    st.subheader("📜 Running Options Trade History Log")
     if trade_df.empty:
         st.info("No recorded trades found in database.")
     else:
@@ -178,14 +177,18 @@ with tab3:
         if not open_positions.empty:
             st.markdown("### 🔄 Active Order Management Engine (Close/Manage Trades)")
             
-            # Changed to a stacked layout to completely eliminate layout indentation errors
             selected_idx = st.selectbox(
                 "Identify Open Contract to Close Out", 
                 options=open_positions.index,
-                format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']})"
+                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']}"
             )
             
             short_prem_exit = st.number_input("Short Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
             long_prem_exit = st.number_input("Long Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
-            close_dte = st.number_input("Days to Expiration at Close (DTE)", min_value=0, value=18)
+            close_date = st.date_input("Date Trade Was Closed", datetime.now())
                 
+            if st.button("🏁 Close Selected Position and Lock in Realized Returns"):
+                raw_df = pd.read_csv(DB_FILE)
+                initial_net_premium = float(raw_df.loc[selected_idx, "Net Premium ($)"])
+                capital = float(raw_df.loc[selected_idx, "Capital Risked"])
+                trade_flow = raw_df.loc[selected_idx, "Flow Type"]
