@@ -7,7 +7,6 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Command Center", layout="wide", page_icon="📊")
 
-# Visual style anchor injections
 st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; font-weight: bold; }</style>")
 
 # --- CORE DATABASE FILE PATH ---
@@ -25,11 +24,13 @@ def load_data():
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
     try:
         df = pd.read_csv(DB_FILE)
-        # Ensure Trade ID structure is valid
-        if "Trade ID" not in df.columns or df.empty:
-            df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
         
-        # Enforce column structural parity
+        # 🛡️ ACTIVE DATA MIGRATION LAYER: If file exists but lacks IDs or columns, patch it instantly
+        mutated = False
+        if "Trade ID" not in df.columns or df["Trade ID"].isnull().any():
+            df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
+            mutated = True
+            
         for col in REQUIRED_COLUMNS:
             if col not in df.columns:
                 if col == "Expiration Date":
@@ -40,6 +41,10 @@ def load_data():
                     df[col] = 0.0
                 else:
                     df[col] = "Unknown"
+                mutated = True
+                
+        if mutated:
+            df.to_csv(DB_FILE, index=False)
         return df
     except Exception as e:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
@@ -52,13 +57,13 @@ def save_trade(trade_dict):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
 
-# Safely load the database records
+# Safely load data with active migration guarantees
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
 st.caption("Emulating The Options Seller Trade Log Architecture with Integrated VRP Sizing and Capital Analytics.")
 
-# --- 🎯 HORIZONTAL NAVIGATION TABS ARE BACK ---
+# --- NAVIGATION TABS ---
 tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"])
 
 # ==========================================
@@ -156,7 +161,7 @@ with tab2:
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
     
-    # 📋 ALWAYS DISPLAY VIEWABLE SPREADSHEET TABLE ON TOP JUST LIKE THE LOG REF
+    # 📋 DISPLAY VIEWABLE DATA SHEET
     st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
         st.dataframe(pd.DataFrame(columns=["Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)"]), use_container_width=True)
@@ -180,12 +185,11 @@ with tab3:
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
         st.markdown("---")
         
-        # --- BULLETPROOF FLAT CLOSING FORM (NO NESTED LOGIC ERRORS) ---
+        # --- ORDER MANAGEMENT ENGINE ---
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
-        open_positions = trade_df[trade_df["Status"] == "Open"]
+        open_positions = trade_df[trade_df["Status"].str.strip().str.upper() == "OPEN"]
         
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
-            # Flattened label mapping using specific item iterations to prevent empty boxes
-            list_ids = open_positions["Trade ID"].tolist()
+            list_ids = open_positions["Trade ID"].astype(str).tolist()
