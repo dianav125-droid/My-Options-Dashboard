@@ -7,8 +7,8 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Dashboard", layout="wide", page_icon="📈")
 
-# Style adjustments for scannability
-st.markdown("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #4CAF50; color: white; }</style>", unsafe_allowed_html=True)
+# Style adjustments for scannability - Using st.html to prevent any parameter errors
+st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #4CAF50; color: white; }</style>")
 
 # --- DATABASE / CSV ENGINE ---
 DB_FILE = "options_trade_log.csv"
@@ -64,11 +64,6 @@ with tab1:
     roi = (net_credit / capital_risked) * 100
     annualized_return = roi * (365 / dte)
     
-    # Threshold Alerts
-    roi_color = "🟢" if 3.0 <= roi <= 5.0 else "⚠️"
-    vrp_color = "🟢" if vrp_pct > 5.0 else "⚠️"
-    iv_color = "🟢" if iv_pct >= 30.0 else "⚠️"
-
     st.markdown("### 🔍 Trade Quality Scan")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Calculated Trade ROI", f"{roi:.2f}%", help="Goal: 3-5%")
@@ -101,12 +96,10 @@ with tab2:
     if trade_df.empty:
         st.info("Your database is currently empty. Commit a trade in Tab 1 to activate performance visuals.")
     else:
-        # High Level Summary Statistics
         total_trades = len(trade_df)
         open_trades = len(trade_df[trade_df["Status"] == "Open"])
         closed_trades = trade_df[trade_df["Status"] == "Closed"]
         
-        # Simple placeholder win rate generation assuming wins if not noted
         win_rate = 100.0 if len(closed_trades) == 0 else (len(closed_trades) / len(closed_trades)) * 100 
         
         c1, c2, c3, c4 = st.columns(4)
@@ -115,7 +108,6 @@ with tab2:
         c3.metric("Running Win Rate", f"{win_rate:.1f}%")
         c4.metric("Total Premium Captured", f"${trade_df['Net Credit'].sum():,.2f}")
 
-        # Allocation Splits
         st.markdown("### 📁 Strategy Allocation Breakdown")
         strat_counts = trade_df["Strategy"].value_counts()
         st.dataframe(strat_counts, use_container_width=True)
@@ -128,10 +120,8 @@ with tab3:
     if trade_df.empty:
         st.info("No recorded trades found in database.")
     else:
-        # Display editable dataframe to allow tracking or closing manually
         st.dataframe(trade_df, use_container_width=True)
         
-        # Reset capability
         if st.checkbox("Danger Zone: Clear Database File"):
             if st.button("Confirm: Clear CSV Logs"):
                 if os.path.exists(DB_FILE):
