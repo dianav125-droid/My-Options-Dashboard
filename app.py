@@ -194,6 +194,5 @@ with tab3:
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
+            # Fixed variable selector formatting to strictly prevent unclosed bracket runtime syntax bugs
             selected_idx = st.selectbox(
-                "Identify Working Open Contract to Close Out", 
-                options=open_positions.index,
