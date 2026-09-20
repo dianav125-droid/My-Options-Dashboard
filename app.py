@@ -19,8 +19,8 @@ def load_data():
         return df
     else:
         return pd.DataFrame(columns=[
-            "Ticker", "Sector", "Strategy", "Status", "Entry Date", 
-            "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
+            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", 
+            "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
             "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
             "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
         ])
@@ -57,7 +57,6 @@ with tab1:
         long_strike = st.number_input("Long Strike Price ($) [Leave 0 if naked]", min_value=0.0, value=95.0, step=0.5)
         
     with col3:
-        # TWO INDIVIDUAL ENTRY PREMIUM FIELDS
         short_prem_entry = st.number_input("Short Leg Entry Premium ($)", min_value=0.00, value=1.50, step=0.05, help="Fidelity 'Sell to Open' price.")
         long_prem_entry = st.number_input("Long Leg Entry Premium ($) [0 if naked]", min_value=0.00, value=0.50, step=0.05, help="Fidelity 'Buy to Open' price. Set to 0 if a single CSP or Covered Call.")
         entry_date = st.date_input("Execution Date (Today)", datetime.now())
@@ -108,7 +107,7 @@ with tab1:
     if st.button("💾 Commit Options Contract Order to Ledger File"):
         trade_data = {
             "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Flow Type": flow_type, "Status": "Open", 
-            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
+            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Contracts": int(contracts), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
             "Calculated DTE": int(calculated_dte), "Close DTE": 0, "Capital Risked": float(capital_risked), 
             "Net Premium ($)": float(total_premium_value), "Exit Cost ($)": 0.0, "IV (%)": float(iv_pct), 
             "Realized PnL ($)": 0.0, "ROI (%)": round(roi, 2), "Annualized Return (%)": round(annualized_return, 2)
@@ -186,7 +185,9 @@ with tab3:
                     options=open_positions.index,
                     format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']})"
                 )
-            # TWO INDIVIDUAL EXIT PREMIUM FIELDS
             with col_short_exit:
-                short_prem_exit = st.number_input("Short Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.20, step=0.05, help="Fidelity 'Buy to Close' cost. Leave 0 if it expired worthless.")
+                short_prem_exit = st.number_input("Short Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.20, step=0.05)
             with col_long_exit:
+                long_prem_exit = st.number_input("Long Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.05, step=0.05)
+            with col_dte:
+
