@@ -20,41 +20,35 @@ REQUIRED_COLUMNS = [
 ]
 
 def load_data():
-    if os.path.exists(DB_FILE):
-        try:
-            df = pd.read_csv(DB_FILE)
-            # Ensure Trade ID exists and is string format
-            if "Trade ID" not in df.columns:
-                df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
-                df.to_csv(DB_FILE, index=False)
-            
-            # Auto-repair any other missing columns dynamically
-            mutated = False
-            for col in REQUIRED_COLUMNS:
-                if col not in df.columns:
-                    if col == "Expiration Date":
-                        df[col] = datetime.now().strftime('%Y-%m-%d')
-                    elif col == "Contracts":
-                        df[col] = 1
-                    elif col in ["Short Strike", "Long Strike", "Exit Cost ($)", "Realized PnL ($)"]:
-                        df[col] = 0.0
-                    else:
-                        df[col] = "Unknown"
-                    mutated = True
-            if mutated:
-                df.to_csv(DB_FILE, index=False)
-            return df
-        except Exception as e:
-            return pd.DataFrame(columns=REQUIRED_COLUMNS)
-    else:
+    if not os.path.exists(DB_FILE):
+        return pd.DataFrame(columns=REQUIRED_COLUMNS)
+    try:
+        df = pd.read_csv(DB_FILE)
+        if "Trade ID" not in df.columns:
+            df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
+            df.to_csv(DB_FILE, index=False)
+        mutated = False
+        for col in REQUIRED_COLUMNS:
+            if col not in df.columns:
+                if col == "Expiration Date":
+                    df[col] = datetime.now().strftime('%Y-%m-%d')
+                elif col == "Contracts":
+                    df[col] = 1
+                elif col in ["Short Strike", "Long Strike", "Exit Cost ($)", "Realized PnL ($)"]:
+                    df[col] = 0.0
+                else:
+                    df[col] = "Unknown"
+                mutated = True
+        if mutated:
+            df.to_csv(DB_FILE, index=False)
+        return df
+    except Exception as e:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
 def save_trade(trade_dict):
     df = load_data()
-    # Generate unique incremental Trade ID
     next_id_num = 1000 + len(df)
     trade_dict["Trade ID"] = f"TRD-{next_id_num}"
-    
     new_row = pd.DataFrame([trade_dict])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
@@ -65,12 +59,14 @@ trade_df = load_data()
 st.title("📊 The Premium Seller Command Center")
 st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
-tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "📜 Live Trade History"])
+# --- MASTER NAVIGATION SELECTION BOX ---
+# Using a clean sidebar dropdown selector entirely removes nested tab spacing bugs from the code structure!
+menu_choice = st.sidebar.radio("🧭 Portfolio Navigation", ["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"], index=0)
 
 # ==========================================
-# TAB 1: AUTOMATED TRADE CALCULATOR
+# VIEW 1: AUTOMATED TRADE CALCULATOR
 # ==========================================
-with tab1:
+if menu_choice == "🧮 Automated Trade Calculator":
     st.subheader("💡 Dynamic Position Sizing & Margin Optimizer")
     
     col1, col2, col3, col4 = st.columns(4)
@@ -93,7 +89,6 @@ with tab1:
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
-    # Core Logic Processing
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
     
@@ -140,12 +135,12 @@ with tab1:
         st.rerun()
 
 # ==========================================
-# TAB 2: TIME-HORIZON PERFORMANCE ANALYTICS
+# VIEW 2: TIME-HORIZON ANALYTICS
 # ==========================================
-with tab2:
+if menu_choice == "📈 Time-Horizon Analytics":
     st.subheader("📈 Time-Horizon Summaries & Tactical Health Analytics")
     if trade_df.empty:
-        st.info("The application database log is empty. Commit a position inside Tab 1 to initialize diagnostic analytics.")
+        st.info("The application database log is empty. Commit a position inside the Calculator view to initialize diagnostics.")
     else:
         total_count = len(trade_df)
         open_df = trade_df[trade_df["Status"] == "Open"]
@@ -161,9 +156,9 @@ with tab2:
         c4.metric("Aggregate Realized Account Return", f"${closed_df['Realized PnL ($)'].sum():,.2f}")
 
 # ==========================================
-# TAB 3: LIVE TRADE HISTORY
+# VIEW 3: LIVE TRADE HISTORY
 # ==========================================
-with tab3:
+if menu_choice == "📜 Live Trade History":
     st.subheader("📜 Running Options Trade History Log")
     st.markdown("### 📋 Active Master History Log Sheet")
     
@@ -189,8 +184,9 @@ with tab3:
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
         st.markdown("---")
         
-        # --- BULLETPROOF MANAGEMENT PORTAL CLOSING ENGINE ---
         open_positions = trade_df[trade_df["Status"] == "Open"]
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
         
         if open_positions.empty:
+            st.success("🟢 All logged trades are currently closed! No active exposure running.")
+        else:
