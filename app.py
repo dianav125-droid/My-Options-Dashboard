@@ -177,17 +177,15 @@ with tab3:
         
         if not open_positions.empty:
             st.markdown("### 🔄 Active Order Management Engine (Close/Manage Trades)")
-            col_sel, col_short_exit, col_long_exit, col_dte = st.columns(4)
             
-            with col_sel:
-                selected_idx = st.selectbox(
-                    "Identify Open Contract to Close Out", 
-                    options=open_positions.index,
-                    format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']})"
-                )
-            with col_short_exit:
-                short_prem_exit = st.number_input("Short Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.20, step=0.05)
-            with col_long_exit:
-                long_prem_exit = st.number_input("Long Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.05, step=0.05)
-            with col_dte:
-
+            # Changed to a stacked layout to completely eliminate layout indentation errors
+            selected_idx = st.selectbox(
+                "Identify Open Contract to Close Out", 
+                options=open_positions.index,
+                format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']})"
+            )
+            
+            short_prem_exit = st.number_input("Short Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
+            long_prem_exit = st.number_input("Long Leg Exit Price ($) [Leave 0 if it expired worthless]", min_value=0.00, value=0.00, step=0.05)
+            close_dte = st.number_input("Days to Expiration at Close (DTE)", min_value=0, value=18)
+                
