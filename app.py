@@ -162,14 +162,12 @@ with tab2:
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
     
-    # 🌟 PERMANENT FIX: RENDER EXCLUSIVE TABLE SEPARATION GUARANTEE FIRST
+    # 📋 ALWAYS DISPLAY THE VIEWABLE DATA SHEET AT THE TOP
     st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
-        # Pre-rendering visual headers even on blank environments to preserve screen alignment
         st.dataframe(pd.DataFrame(columns=["Performance", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
     else:
-        # Safety formatting copy
         presentation_df = trade_df.copy()
         
         badges = []
@@ -196,3 +194,6 @@ with tab3:
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
+            selected_idx = st.selectbox(
+                "Identify Working Open Contract to Close Out", 
+                options=open_positions.index,
