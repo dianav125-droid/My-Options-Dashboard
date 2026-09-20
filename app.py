@@ -7,7 +7,6 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Command Center", layout="wide", page_icon="📊")
 
-# High-visibility visual anchors
 st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #1E3A8A; color: white; font-weight: bold; }</style>")
 
 # --- CORE DATABASE FILE PATH ---
@@ -20,7 +19,7 @@ def load_data():
         return df
     else:
         return pd.DataFrame(columns=[
-            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", 
+            "Ticker", "Sector", "Strategy", "Status", "Entry Date", 
             "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
             "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
             "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
@@ -33,13 +32,11 @@ def save_trade(trade_dict):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
 
-# Load master trade log
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
-st.caption("Live Options Portfolio Log, Automated Capital Collateral Engine, and Transaction Velocity Tracking.")
+st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
-# --- MASTER NAVIGATION TABS ---
 tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "🗂️ Unrestricted Master Ledger"])
 
 # ==========================================
@@ -52,72 +49,61 @@ with tab1:
     with col1:
         ticker = st.text_input("Ticker Symbol", value="MU").upper()
         sector = st.selectbox("Ticker Sector Allocation", ["Semiconductors", "Tech Infrastructure", "Tech Components", "Clean Energy", "Index / Macro", "Other"])
-        strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Call Debit Spread (CDS)", "Long Call / Speculative Debit", "Other Position"])
-        flow_type = st.radio("Transaction Flow", ["Credit (Received)", "Debit (Paid)"], index=0, horizontal=True)
+        strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Call Debit Spread (CDS)", "Long Call / Speculative Debit"])
         
     with col2:
-        # Automated Strike Sizing Block
         contracts = st.number_input("Number of Contracts", min_value=1, value=1, step=1)
         short_strike = st.number_input("Short Strike Price ($) [Leave 0 if none]", min_value=0.0, value=100.0, step=0.5)
         long_strike = st.number_input("Long Strike Price ($) [Leave 0 if naked]", min_value=0.0, value=95.0, step=0.5)
         
     with col3:
-        # Premium and Time Inputs
-        premium_per_contract = st.number_input("Premium Per Contract ($)", min_value=0.00, value=1.00, step=0.05, help="Enter the per-share premium price filled on Fidelity (e.g. 1.00 = $100 cash leg).")
+        # TWO INDIVIDUAL ENTRY PREMIUM FIELDS
+        short_prem_entry = st.number_input("Short Leg Entry Premium ($)", min_value=0.00, value=1.50, step=0.05, help="Fidelity 'Sell to Open' price.")
+        long_prem_entry = st.number_input("Long Leg Entry Premium ($) [0 if naked]", min_value=0.00, value=0.50, step=0.05, help="Fidelity 'Buy to Open' price. Set to 0 if a single CSP or Covered Call.")
         entry_date = st.date_input("Execution Date (Today)", datetime.now())
         exp_date = st.date_input("Contract Expiration Date", datetime.now() + pd.Timedelta(days=40))
         
     with col4:
-        iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0, help="Enter the standard option contract IV displayed on Fidelity.")
+        iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
-    # --- THE COGNITIVE AUTOMATED MARGIN ENGINE ---
-    total_premium_value = premium_per_contract * 100 * contracts
+    # --- AUTOMATED ENTRY MATHEMATICS ---
+    net_premium_per_contract = short_prem_entry - long_prem_entry
+    total_premium_value = net_premium_per_contract * 100 * contracts
     
     # Calculate automated DTE
     dte_delta = (exp_date - entry_date).days
     calculated_dte = max(int(dte_delta), 1)
 
-    # Compute Capital Risk / Collateral Requirements dynamically based on choices
-    if "Spread" in strategy or (short_strike > 0 and long_strike > 0):
-        # Multi-leg spreads collateral math
+    # Automatically determine Flow Type behind the scenes
+    flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
+    abs_premium_value = abs(total_premium_value)
+
+    # Compute Capital Risk / Collateral Requirements dynamically based on strikes
+    if long_strike > 0 and short_strike > 0:
         spread_width = abs(short_strike - long_strike)
         max_spread_collateral = spread_width * 100 * contracts
-        
         if flow_type == "Credit (Received)":
-            capital_risked = max_spread_collateral - total_premium_value
-            net_gain_potential = total_premium_value
-        else: # Debit Flow
-            capital_risked = total_premium_value
-            net_gain_potential = max_spread_collateral - total_premium_value
-            
+            capital_risked = max_spread_collateral - abs_premium_value
+            net_gain_potential = abs_premium_value
+        else: 
+            capital_risked = abs_premium_value
+            net_gain_potential = max_spread_collateral - abs_premium_value
     elif "Put" in strategy or strategy == "Cash Secured Put (CSP)":
-        # Naked/Cash Secured Puts cash allocation math
         capital_risked = short_strike * 100 * contracts
-        net_gain_potential = total_premium_value if flow_type == "Credit (Received)" else 0.0
-        
+        net_gain_potential = abs_premium_value if flow_type == "Credit (Received)" else 0.0
     else:
-        # Standard long option / single directional legs fallback
-        capital_risked = total_premium_value
-        net_gain_potential = total_premium_value if flow_type == "Credit (Received)" else 500.0 # Arbitrary visual target
+        capital_risked = abs_premium_value
+        net_gain_potential = abs_premium_value
 
-    # Formulate Core Return Ratios
     roi = (net_gain_potential / max(capital_risked, 1.0)) * 100
     annualized_return = roi * (365 / calculated_dte)
     
     st.markdown("### 🔍 Mathematical Position Profile")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Calculated Capital Required / Risk", f"${capital_risked:,.2f}", help="The true required collateral margin or out-of-pocket cash locked by Fidelity.")
-    m2.metric("Max Return Potential", f"${net_gain_potential:,.2f}")
-    m3.metric("Trade Geometry ROI", f"{roi:.2f}%", help="Goal: 3.00% to 5.00% standard velocity loop.")
+    m1.metric("Calculated Capital Required / Risk", f"${capital_risked:,.2f}")
+    m2.metric("Net Calculated Entry Premium", f"${total_premium_value:,.2f}", delta=flow_type)
+    m3.metric("Trade Geometry ROI", f"{roi:.2f}%")
     m4.metric("Annualized Time Decay Velocity", f"{annualized_return:.2f}%")
-
-    # Custom Model Conformance Guidance Box
-    if flow_type == "Credit (Received)" and 3.0 <= roi <= 5.0:
-        st.success("✅ **Premium Model Target Achieved:** Trade falls directly inside your optimal 3-5% cash-flow setup.")
-    elif flow_type == "Debit (Paid)":
-        st.info("🎯 **Long Alpha Positioning:** Directional leverage strategy active. Volatility decay works against this contract structure; monitor closely.")
-    else:
-        st.warning("⚠️ **Model Variance Divergence:** Position configuration falls outside standard automated thresholds.")
 
     if st.button("💾 Commit Options Contract Order to Ledger File"):
         trade_data = {
@@ -128,7 +114,7 @@ with tab1:
             "Realized PnL ($)": 0.0, "ROI (%)": round(roi, 2), "Annualized Return (%)": round(annualized_return, 2)
         }
         save_trade(trade_data)
-        st.success(f"Successfully appended {strategy} execution data for ${ticker} into your cloud repository.")
+        st.success(f"Successfully appended {strategy} execution data into your cloud repository.")
         st.rerun()
 
 # ==========================================
@@ -180,13 +166,27 @@ with tab2:
             st.metric("Positions Taken", len(df_year))
             st.metric("Premium Allocated", f"${df_year['Net Premium ($)'].sum():,.2f}")
 
-        st.markdown("---")
-        st.markdown("### 🎯 Structural Asset & Ticker Performance Weights")
-        ticker_summary = trade_df.groupby("Ticker").agg(
-            Total_Trades=("Ticker", "count"),
-            Total_Net_PnL=("Realized PnL ($)", "sum"),
-            Avg_Entry_DTE=("Calculated DTE", "mean")
-        )
-        st.dataframe(ticker_summary, use_container_width=True)
-
 # ==========================================
+# TAB 3: UNRESTRICTED MASTER LEDGER
+# ==========================================
+with tab3:
+    st.subheader("🗂️ Live Master Options Vault Ledger")
+    if trade_df.empty:
+        st.info("No recorded trades found in database.")
+    else:
+        open_positions = trade_df[trade_df["Status"] == "Open"]
+        
+        if not open_positions.empty:
+            st.markdown("### 🔄 Active Order Management Engine (Close/Manage Trades)")
+            col_sel, col_short_exit, col_long_exit, col_dte = st.columns(4)
+            
+            with col_sel:
+                selected_idx = st.selectbox(
+                    "Identify Open Contract to Close Out", 
+                    options=open_positions.index,
+                    format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']})"
+                )
+            # TWO INDIVIDUAL EXIT PREMIUM FIELDS
+            with col_short_exit:
+                short_prem_exit = st.number_input("Short Leg Exit Price ($) [0 if expired worthless]", min_value=0.00, value=0.20, step=0.05, help="Fidelity 'Buy to Close' cost. Leave 0 if it expired worthless.")
+            with col_long_exit:
