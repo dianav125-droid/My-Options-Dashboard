@@ -13,7 +13,7 @@ st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-colo
 DB_FILE = "options_master_ledger.csv"
 
 REQUIRED_COLUMNS = [
-    "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
+    "Trade ID", "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
     "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
     "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
     "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
@@ -23,6 +23,12 @@ def load_data():
     if os.path.exists(DB_FILE):
         try:
             df = pd.read_csv(DB_FILE)
+            # Ensure Trade ID exists and is string format
+            if "Trade ID" not in df.columns:
+                df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
+                df.to_csv(DB_FILE, index=False)
+            
+            # Auto-repair any other missing columns dynamically
             mutated = False
             for col in REQUIRED_COLUMNS:
                 if col not in df.columns:
@@ -45,6 +51,10 @@ def load_data():
 
 def save_trade(trade_dict):
     df = load_data()
+    # Generate unique incremental Trade ID
+    next_id_num = 1000 + len(df)
+    trade_dict["Trade ID"] = f"TRD-{next_id_num}"
+    
     new_row = pd.DataFrame([trade_dict])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
@@ -118,7 +128,7 @@ with tab1:
 
     if st.button("💾 Commit Options Contract Order to Ledger File"):
         trade_data = {
-            "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Flow Type": flow_type, "Status": "Open", 
+            "Trade ID": "PENDING", "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Flow Type": flow_type, "Status": "Open", 
             "Entry Date": entry_date.strftime('%Y-%m-%d'), "Expiration Date": exp_date.strftime('%Y-%m-%d'),
             "Contracts": int(contracts), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
             "Calculated DTE": int(calculated_dte), "Close DTE": 0, "Capital Risked": float(capital_risked), 
@@ -158,7 +168,7 @@ with tab3:
     st.markdown("### 📋 Active Master History Log Sheet")
     
     if trade_df.empty:
-        st.dataframe(pd.DataFrame(columns=["Performance", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
+        st.dataframe(pd.DataFrame(columns=["Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
     else:
         presentation_df = trade_df.copy()
@@ -172,19 +182,15 @@ with tab3:
                 badges.append("🔴 LOSS")
         presentation_df.insert(0, "📊 Performance", badges)
         
-        col_order = ["📊 Performance", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
+        col_order = ["📊 Performance", "Trade ID", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
         st.dataframe(presentation_df[col_order], use_container_width=True)
         
         csv_data = trade_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
         st.markdown("---")
         
+        # --- BULLETPROOF MANAGEMENT PORTAL CLOSING ENGINE ---
         open_positions = trade_df[trade_df["Status"] == "Open"]
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
         
         if open_positions.empty:
-            st.success("🟢 All logged trades are currently closed! No active exposure running.")
-        else:
-            # Rebuilt selection variable entirely outside any multi-column layout functions to force-break bracket compiler anomalies
-            working_labels = [f"${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Collected: ${trade_df.loc[x, 'Net Premium ($)']:.0f})" for x in open_positions.index]
-            selected_label = st.selectbox("Identify Working Open Contract to Close Out", options=working_labels)
