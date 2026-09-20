@@ -7,25 +7,46 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Command Center", layout="wide", page_icon="📊")
 
-# Custom UI Badging Styles to copy institutional execution feeds
 st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #1E3A8A; color: white; font-weight: bold; }</style>")
 
 # --- CORE DATABASE FILE PATH ---
 DB_FILE = "options_master_ledger.csv"
 
+# REQUIRED STRUCTURAL COLUMNS FOR THE ENGINE
+REQUIRED_COLUMNS = [
+    "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
+    "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
+    "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
+    "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
+]
+
 def load_data():
     if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        df['Entry Date'] = pd.to_datetime(df['Entry Date'])
-        return df
+        try:
+            df = pd.read_csv(DB_FILE)
+            # 🛡️ THE AUTO-REPAIR ENGINE: Check for and insert any missing columns dynamically
+            mutated = False
+            for col in REQUIRED_COLUMNS:
+                if col not in df.columns:
+                    if col == "Expiration Date":
+                        df[col] = (pd.to_datetime(df['Entry Date']) + pd.Timedelta(days=40)).dt.strftime('%Y-%m-%d')
+                    elif col == "Contracts":
+                        df[col] = 1
+                    elif col in ["Short Strike", "Long Strike", "Exit Cost ($)", "Realized PnL ($)"]:
+                        df[col] = 0.0
+                    else:
+                        df[col] = "Unknown"
+                    mutated = True
+            if mutated:
+                df.to_csv(DB_FILE, index=False)
+            
+            df['Entry Date'] = pd.to_datetime(df['Entry Date'])
+            return df
+        except Exception as e:
+            st.error(f"Database error auto-repaired. Resetting framework file. Technical note: {e}")
+            return pd.DataFrame(columns=REQUIRED_COLUMNS)
     else:
-        # Pre-seeding empty template with structural column parity to ensure immediate open-render
-        return pd.DataFrame(columns=[
-            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", "Expiration Date",
-            "Contracts", "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
-            "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
-            "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
-        ])
+        return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
 def save_trade(trade_dict):
     df = load_data()
@@ -39,7 +60,6 @@ trade_df = load_data()
 st.title("📊 The Premium Seller Command Center")
 st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
-# --- MASTER NAVIGATION TABS ---
 tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "📜 Live Trade History"])
 
 # ==========================================
@@ -68,11 +88,10 @@ with tab1:
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
-    # Entry Formulations
+    # Math processing
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
     calculated_dte = max(int((exp_date - entry_date).days), 1)
-
     flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
     abs_premium_value = abs(total_premium_value)
 
@@ -139,47 +158,33 @@ with tab2:
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
     
-    # 🌟 CRITICAL CHANGE: ALWAYS RENDER THE VIEWABLE DATA SHEET ON TOP JUST LIKE THE OPTIONS SELLER
-    st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
-        # Pre-render a visual layout structure even if empty so it matches the reference tool framework
-        st.dataframe(pd.DataFrame(columns=["Status Badge", "Ticker", "Strategy", "Entry Date", "Calculated DTE", "Capital Risked", "Net Premium ($)", "Realized PnL ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to fill log.")
     else:
-        # Create a deep copy to apply visual badge indicators without mutating core numerical records
-        presentation_df = trade_df.copy()
-        presentation_df['Entry Date'] = presentation_df['Entry Date'].dt.strftime('%Y-%m-%d')
-        
-        # Build institutional badge column map
-        badges = []
-        for idx, row in presentation_df.iterrows():
-            if row["Status"] == "Open":
-                badges.append("🔵 OPEN")
-            elif row["Realized PnL ($)"] >= 0:
-                badges.append("🟢 WIN")
-            else:
-                badges.append("🔴 LOSS")
-        presentation_df.insert(0, "📊 Performance", badges)
-        
-        # Re-ordering core columns so it mimics the fast scan layout of a professional log
-        col_order = ["📊 Performance", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
-        st.dataframe(presentation_df[col_order], use_container_width=True)
-        
-        # CSV Hard Backup Button
-        csv_data = trade_df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
-        
-        st.markdown("---")
-        
-        # 🔄 Hiding Order Management Tool beneath the main screen so it stays functional without cluttering your view
+        # 🌟 FEATURE UPGRADE: RE-POSITIONED MANAGEMENT ENGINE ON TOP FOR INTUITIVE ACCESS
         open_positions = trade_df[trade_df["Status"] == "Open"]
-        if not open_positions.empty:
-            st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
-            
+        
+        st.markdown("### ⚙️ Active Order Management Control Center")
+        if open_positions.empty:
+            st.success("🟢 All logged trades are currently closed! No active exposure running.")
+        else:
             selected_idx = st.selectbox(
-                "Identify Working Open Contract to Close Out", 
+                "Select a Working Position to Close Out / Realize Returns:", 
                 options=open_positions.index,
-                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Risked: ${trade_df.loc[x, 'Capital Risked']:.0f})"
+                format_func=lambda x: f"[{pd.to_datetime(trade_df.loc[x, 'Entry Date']).strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Net: ${trade_df.loc[x, 'Net Premium ($)']:.0f})"
             )
             
             c_col1, c_col2, c_col3 = st.columns(3)
+            with c_col1:
+                short_prem_exit = st.number_input("Short Leg Close Price ($) [0 if expired worthless]", min_value=0.00, value=0.00, step=0.05)
+            with c_col2:
+                long_prem_exit = st.number_input("Long Leg Close Price ($) [0 if expired worthless]", min_value=0.00, value=0.00, step=0.05)
+            with c_col3:
+                close_date = st.date_input("Execution Close Date", datetime.now())
+                
+            if st.button("🏁 Execute Close Order & Calculate Realized Performance"):
+                raw_df = pd.read_csv(DB_FILE)
+                initial_net_premium = float(raw_df.loc[selected_idx, "Net Premium ($)"])
+                capital = float(raw_df.loc[selected_idx, "Capital Risked"])
+                trade_flow = raw_df.loc[selected_idx, "Flow Type"]
+                saved_contracts = float(raw_df.loc[selected_idx, "Contracts"])
