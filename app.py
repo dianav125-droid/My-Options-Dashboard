@@ -20,9 +20,10 @@ def load_data():
         return df
     else:
         return pd.DataFrame(columns=[
-            "Ticker", "Sector", "Strategy", "Status", "Entry Date", 
-            "Calculated DTE", "Close DTE", "Capital Risked", "Net Credit", 
-            "Exit Premium", "IV (%)", "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
+            "Ticker", "Sector", "Strategy", "Flow Type", "Status", "Entry Date", 
+            "Short Strike", "Long Strike", "Calculated DTE", "Close DTE", 
+            "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "IV (%)", 
+            "Realized PnL ($)", "ROI (%)", "Annualized Return (%)"
         ])
 
 def save_trade(trade_dict):
@@ -36,62 +37,98 @@ def save_trade(trade_dict):
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
-st.caption("Live Options Portfolio Log, Automated Expiration Tracking, and Capital Velocity Calculator.")
+st.caption("Live Options Portfolio Log, Automated Capital Collateral Engine, and Transaction Velocity Tracking.")
 
 # --- MASTER NAVIGATION TABS ---
-tab1, tab2, tab3 = st.tabs(["🧮 Pre-Trade Quality Analyzer", "📈 Time-Horizon Performance Analytics", "🗂️ Unrestricted Master Ledger"])
+tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Performance Analytics", "🗂️ Unrestricted Master Ledger"])
 
 # ==========================================
-# TAB 1: PRE-TRADE QUALITY ANALYZER
+# TAB 1: AUTOMATED TRADE CALCULATOR
 # ==========================================
 with tab1:
-    st.subheader("💡 Pre-Trade Probability & Velocity Calculator")
+    st.subheader("💡 Dynamic Position Sizing & Margin Optimizer")
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         ticker = st.text_input("Ticker Symbol", value="MU").upper()
         sector = st.selectbox("Ticker Sector Allocation", ["Semiconductors", "Tech Infrastructure", "Tech Components", "Clean Energy", "Index / Macro", "Other"])
-        strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Long Call / Speculative Debit", "Other Premium Sale"])
+        strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Call Debit Spread (CDS)", "Long Call / Speculative Debit", "Other Position"])
+        flow_type = st.radio("Transaction Flow", ["Credit (Received)", "Debit (Paid)"], index=0, horizontal=True)
+        
     with col2:
-        capital_risked = st.number_input("Capital Risked / Collateral Max Risk ($)", min_value=1.0, value=400.0, step=50.0)
-        net_credit = st.number_input("Net Entry Credit Collected ($)", min_value=0.0, value=100.0, step=5.0)
+        # Automated Strike Sizing Block
+        contracts = st.number_input("Number of Contracts", min_value=1, value=1, step=1)
+        short_strike = st.number_input("Short Strike Price ($) [Leave 0 if none]", min_value=0.0, value=100.0, step=0.5)
+        long_strike = st.number_input("Long Strike Price ($) [Leave 0 if naked]", min_value=0.0, value=95.0, step=0.5)
+        
     with col3:
+        # Premium and Time Inputs
+        premium_per_contract = st.number_input("Premium Per Contract ($)", min_value=0.00, value=1.00, step=0.05, help="Enter the per-share premium price filled on Fidelity (e.g. 1.00 = $100 cash leg).")
         entry_date = st.date_input("Execution Date (Today)", datetime.now())
         exp_date = st.date_input("Contract Expiration Date", datetime.now() + pd.Timedelta(days=40))
+        
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0, help="Enter the standard option contract IV displayed on Fidelity.")
 
-    # Automated DTE Calculation Engine
+    # --- THE COGNITIVE AUTOMATED MARGIN ENGINE ---
+    total_premium_value = premium_per_contract * 100 * contracts
+    
+    # Calculate automated DTE
     dte_delta = (exp_date - entry_date).days
-    calculated_dte = max(int(dte_delta), 1)  # Safeguard division by zero
+    calculated_dte = max(int(dte_delta), 1)
 
-    # Mathematical Core Formulations
-    roi = (net_credit / capital_risked) * 100
+    # Compute Capital Risk / Collateral Requirements dynamically based on choices
+    if "Spread" in strategy or (short_strike > 0 and long_strike > 0):
+        # Multi-leg spreads collateral math
+        spread_width = abs(short_strike - long_strike)
+        max_spread_collateral = spread_width * 100 * contracts
+        
+        if flow_type == "Credit (Received)":
+            capital_risked = max_spread_collateral - total_premium_value
+            net_gain_potential = total_premium_value
+        else: # Debit Flow
+            capital_risked = total_premium_value
+            net_gain_potential = max_spread_collateral - total_premium_value
+            
+    elif "Put" in strategy or strategy == "Cash Secured Put (CSP)":
+        # Naked/Cash Secured Puts cash allocation math
+        capital_risked = short_strike * 100 * contracts
+        net_gain_potential = total_premium_value if flow_type == "Credit (Received)" else 0.0
+        
+    else:
+        # Standard long option / single directional legs fallback
+        capital_risked = total_premium_value
+        net_gain_potential = total_premium_value if flow_type == "Credit (Received)" else 500.0 # Arbitrary visual target
+
+    # Formulate Core Return Ratios
+    roi = (net_gain_potential / max(capital_risked, 1.0)) * 100
     annualized_return = roi * (365 / calculated_dte)
     
-    st.markdown("### 🔍 Statistical Quality Scan")
+    st.markdown("### 🔍 Mathematical Position Profile")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Expected Pre-Trade ROI", f"{roi:.2f}%", help="Goal: 3.00% to 5.00% ROI per position")
-    m2.metric("Annualized Return Velocity", f"{annualized_return:.2f}%")
-    m3.metric("Fidelity Sourced IV Floor", f"{iv_pct:.1f}%")
-    m4.metric("Automated DTE Clock", f"{calculated_dte} Days", help="Calculated smoothly from your entry to expiration target dates.")
-    
-    # Custom Dynamic Model Conformance Guidance 
-    if 3.0 <= roi <= 5.0 and calculated_dte >= 14:
-        st.success("✅ **Alpha Conformance Confirmed:** This position matches your targeted 3-5% ROI model parameters.")
+    m1.metric("Calculated Capital Required / Risk", f"${capital_risked:,.2f}", help="The true required collateral margin or out-of-pocket cash locked by Fidelity.")
+    m2.metric("Max Return Potential", f"${net_gain_potential:,.2f}")
+    m3.metric("Trade Geometry ROI", f"{roi:.2f}%", help="Goal: 3.00% to 5.00% standard velocity loop.")
+    m4.metric("Annualized Time Decay Velocity", f"{annualized_return:.2f}%")
+
+    # Custom Model Conformance Guidance Box
+    if flow_type == "Credit (Received)" and 3.0 <= roi <= 5.0:
+        st.success("✅ **Premium Model Target Achieved:** Trade falls directly inside your optimal 3-5% cash-flow setup.")
+    elif flow_type == "Debit (Paid)":
+        st.info("🎯 **Long Alpha Positioning:** Directional leverage strategy active. Volatility decay works against this contract structure; monitor closely.")
     else:
-        st.warning("⚠️ **Model Variance Present:** One or more tracking thresholds deviate from your 3-5% target framework.")
+        st.warning("⚠️ **Model Variance Divergence:** Position configuration falls outside standard automated thresholds.")
 
     if st.button("💾 Commit Options Contract Order to Ledger File"):
         trade_data = {
-            "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Status": "Open", 
-            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Calculated DTE": int(calculated_dte), "Close DTE": 0,
-            "Capital Risked": float(capital_risked), "Net Credit": float(net_credit), "Exit Premium": 0.0,
-            "IV (%)": float(iv_pct), "Realized PnL ($)": 0.0, "ROI (%)": round(roi, 2), 
-            "Annualized Return (%)": round(annualized_return, 2)
+            "Ticker": ticker, "Sector": sector, "Strategy": strategy, "Flow Type": flow_type, "Status": "Open", 
+            "Entry Date": entry_date.strftime('%Y-%m-%d'), "Short Strike": float(short_strike), "Long Strike": float(long_strike),
+            "Calculated DTE": int(calculated_dte), "Close DTE": 0, "Capital Risked": float(capital_risked), 
+            "Net Premium ($)": float(total_premium_value), "Exit Cost ($)": 0.0, "IV (%)": float(iv_pct), 
+            "Realized PnL ($)": 0.0, "ROI (%)": round(roi, 2), "Annualized Return (%)": round(annualized_return, 2)
         }
         save_trade(trade_data)
-        st.success(f"Successfully appended {strategy} execution data for ${ticker} into the database.")
+        st.success(f"Successfully appended {strategy} execution data for ${ticker} into your cloud repository.")
         st.rerun()
 
 # ==========================================
@@ -129,19 +166,19 @@ with tab2:
         with t1:
             st.markdown("#### 📅 Daily Inflow (Today)")
             st.metric("Positions Taken", len(df_today))
-            st.metric("Est. Total Credit", f"${df_today['Net Credit'].sum():,.2f}")
+            st.metric("Premium Allocated", f"${df_today['Net Premium ($)'].sum():,.2f}")
         with t2:
             st.markdown("#### 🗓️ Weekly Inflow (This Week)")
             st.metric("Positions Taken", len(df_week))
-            st.metric("Est. Total Credit", f"${df_week['Net Credit'].sum():,.2f}")
+            st.metric("Premium Allocated", f"${df_week['Net Premium ($)'].sum():,.2f}")
         with t3:
             st.markdown("#### 🗒️ Monthly Inflow (This Month)")
             st.metric("Positions Taken", len(df_month))
-            st.metric("Est. Total Credit", f"${df_month['Net Credit'].sum():,.2f}")
+            st.metric("Premium Allocated", f"${df_month['Net Premium ($)'].sum():,.2f}")
         with t4:
             st.markdown("#### 📊 Annual Inflow (YTD)")
             st.metric("Positions Taken", len(df_year))
-            st.metric("Est. Total Credit", f"${df_year['Net Credit'].sum():,.2f}")
+            st.metric("Premium Allocated", f"${df_year['Net Premium ($)'].sum():,.2f}")
 
         st.markdown("---")
         st.markdown("### 🎯 Structural Asset & Ticker Performance Weights")
@@ -153,48 +190,3 @@ with tab2:
         st.dataframe(ticker_summary, use_container_width=True)
 
 # ==========================================
-# TAB 3: UNRESTRICTED MASTER LEDGER
-# ==========================================
-with tab3:
-    st.subheader("🗂️ Live Master Options Vault Ledger")
-    if trade_df.empty:
-        st.info("No recorded trades found in database.")
-    else:
-        open_positions = trade_df[trade_df["Status"] == "Open"]
-        
-        if not open_positions.empty:
-            st.markdown("### 🔄 Active Order Management Engine (Close/Manage Trades)")
-            col_sel, col_prem, col_dte = st.columns(3)
-            
-            with col_sel:
-                selected_idx = st.selectbox(
-                    "Identify Open Contract to Modify Status", 
-                    options=open_positions.index,
-                    format_func=lambda x: f"[{trade_df.loc[x, 'Entry Date'].strftime('%Y-%m-%d')}] ${trade_df.loc[x, 'Ticker']} - {trade_df.loc[x, 'Strategy']} (Collected: ${trade_df.loc[x, 'Net Credit']})"
-                )
-            with col_prem:
-                exit_premium = st.number_input("Final Buy-To-Close Premium Cost ($)", min_value=0.0, value=50.0, step=5.0)
-            with col_dte:
-                close_dte = st.number_input("Days to Expiration at Close (DTE)", min_value=0, value=18)
-                
-            if st.button("🏁 Close Selected Position and Lock in Realized Returns"):
-                raw_df = pd.read_csv(DB_FILE)
-                initial_credit = float(raw_df.loc[selected_idx, "Net Credit"])
-                capital = float(raw_df.loc[selected_idx, "Capital Risked"])
-                
-                realized_pnl = initial_credit - exit_premium
-                final_roi = (realized_pnl / capital) * 100
-                
-                raw_df.loc[selected_idx, "Status"] = "Closed"
-                raw_df.loc[selected_idx, "Exit Premium"] = float(exit_premium)
-                raw_df.loc[selected_idx, "Close DTE"] = int(close_dte)
-                raw_df.loc[selected_idx, "Realized PnL ($)"] = round(realized_pnl, 2)
-                raw_df.loc[selected_idx, "ROI (%)"] = round(final_roi, 2)
-                
-                raw_df.to_csv(DB_FILE, index=False)
-                st.success("Master database updated and locked in successfully!")
-                st.rerun()
-                
-            st.markdown("---")
-
-        display_df = trade_df.copy()
