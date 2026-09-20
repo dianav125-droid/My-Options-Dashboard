@@ -7,7 +7,8 @@ from datetime import datetime
 # --- CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Premium Seller Command Center", layout="wide", page_icon="📊")
 
-st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; background-color: #1E3A8A; color: white; font-weight: bold; }</style>")
+# Visual style anchor injections
+st.html("<style>.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; } .stButton>button { width: 100%; font-weight: bold; }</style>")
 
 # --- CORE DATABASE FILE PATH ---
 DB_FILE = "options_master_ledger.csv"
@@ -24,10 +25,11 @@ def load_data():
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
     try:
         df = pd.read_csv(DB_FILE)
-        if "Trade ID" not in df.columns:
+        # Ensure Trade ID structure is valid
+        if "Trade ID" not in df.columns or df.empty:
             df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
-            df.to_csv(DB_FILE, index=False)
-        mutated = False
+        
+        # Enforce column structural parity
         for col in REQUIRED_COLUMNS:
             if col not in df.columns:
                 if col == "Expiration Date":
@@ -38,9 +40,6 @@ def load_data():
                     df[col] = 0.0
                 else:
                     df[col] = "Unknown"
-                mutated = True
-        if mutated:
-            df.to_csv(DB_FILE, index=False)
         return df
     except Exception as e:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
@@ -53,24 +52,24 @@ def save_trade(trade_dict):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
 
-# Load master trade log safely
+# Safely load the database records
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
-st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
+st.caption("Emulating The Options Seller Trade Log Architecture with Integrated VRP Sizing and Capital Analytics.")
 
-# --- MASTER NAVIGATION SELECTION BOX ---
-menu_choice = st.sidebar.radio("🧭 Portfolio Navigation", ["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"], index=0)
+# --- 🎯 HORIZONTAL NAVIGATION TABS ARE BACK ---
+tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"])
 
 # ==========================================
-# VIEW 1: AUTOMATED TRADE CALCULATOR
+# TAB 1: AUTOMATED TRADE CALCULATOR
 # ==========================================
-if menu_choice == "🧮 Automated Trade Calculator":
+with tab1:
     st.subheader("💡 Dynamic Position Sizing & Margin Optimizer")
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        ticker = st.text_input("Ticker Symbol", value="MU").upper()
+        ticker = st.text_input("Ticker Symbol", value="MU", key="calc_ticker").upper()
         sector = st.selectbox("Ticker Sector Allocation", ["Semiconductors", "Tech Infrastructure", "Tech Components", "Clean Energy", "Index / Macro", "Other"])
         strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Call Debit Spread (CDS)", "Long Call / Speculative Debit"])
         
@@ -88,13 +87,10 @@ if menu_choice == "🧮 Automated Trade Calculator":
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
+    # Core Calculations
     net_premium_per_contract = short_prem_entry - long_prem_entry
     total_premium_value = net_premium_per_contract * 100 * contracts
-    
-    e_dt = datetime.combine(entry_date, datetime.min.time())
-    ex_dt = datetime.combine(exp_date, datetime.min.time())
-    calculated_dte = max(int((ex_dt - e_dt).days), 1)
-    
+    calculated_dte = max(int((exp_date - entry_date).days), 1)
     flow_type = "Credit (Received)" if net_premium_per_contract >= 0 else "Debit (Paid)"
     abs_premium_value = abs(total_premium_value)
 
@@ -134,9 +130,9 @@ if menu_choice == "🧮 Automated Trade Calculator":
         st.rerun()
 
 # ==========================================
-# VIEW 2: TIME-HORIZON ANALYTICS
+# TAB 2: TIME-HORIZON PERFORMANCE ANALYTICS
 # ==========================================
-if menu_choice == "📈 Time-Horizon Analytics":
+with tab2:
     st.subheader("📈 Time-Horizon Summaries & Tactical Health Analytics")
     if trade_df.empty:
         st.info("The application database log is empty. Commit a position inside the Calculator view to initialize diagnostics.")
@@ -155,12 +151,13 @@ if menu_choice == "📈 Time-Horizon Analytics":
         c4.metric("Aggregate Realized Account Return", f"${closed_df['Realized PnL ($)'].sum():,.2f}")
 
 # ==========================================
-# VIEW 3: LIVE TRADE HISTORY
+# TAB 3: LIVE TRADE HISTORY
 # ==========================================
-if menu_choice == "📜 Live Trade History":
+with tab3:
     st.subheader("📜 Running Options Trade History Log")
-    st.markdown("### 📋 Active Master History Log Sheet")
     
+    # 📋 ALWAYS DISPLAY VIEWABLE SPREADSHEET TABLE ON TOP JUST LIKE THE LOG REF
+    st.markdown("### 📋 Active Master History Log Sheet")
     if trade_df.empty:
         st.dataframe(pd.DataFrame(columns=["Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
@@ -176,18 +173,19 @@ if menu_choice == "📜 Live Trade History":
                 badges.append("🔴 LOSS")
         presentation_df.insert(0, "📊 Performance", badges)
         
-        col_order = ["📊 Performance", "Trade ID", "Ticker", "Strategy", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
+        col_order = ["📊 Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
         st.dataframe(presentation_df[col_order], use_container_width=True)
         
         csv_data = trade_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
         st.markdown("---")
         
-        # --- COMPLETELY FLATTENED ORDER MANAGEMENT ENGINE ---
+        # --- BULLETPROOF FLAT CLOSING FORM (NO NESTED LOGIC ERRORS) ---
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
         open_positions = trade_df[trade_df["Status"] == "Open"]
         
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
-            open_ids = open_positions["Trade ID"].tolist()
+            # Flattened label mapping using specific item iterations to prevent empty boxes
+            list_ids = open_positions["Trade ID"].tolist()
