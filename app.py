@@ -24,29 +24,14 @@ def load_data():
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
     try:
         df = pd.read_csv(DB_FILE)
-        
-        # 🛡️ ACTIVE DATA MIGRATION LAYER: If file exists but lacks IDs or columns, patch it instantly
-        mutated = False
-        if "Trade ID" not in df.columns or df["Trade ID"].isnull().any():
+        # Force repair empty columns cleanly so they can never freeze your dropdowns
+        if "Trade ID" not in df.columns or df.empty:
             df["Trade ID"] = [f"TRD-{1000+i}" for i in range(len(df))]
-            mutated = True
-            
         for col in REQUIRED_COLUMNS:
             if col not in df.columns:
-                if col == "Expiration Date":
-                    df[col] = datetime.now().strftime('%Y-%m-%d')
-                elif col == "Contracts":
-                    df[col] = 1
-                elif col in ["Short Strike", "Long Strike", "Exit Cost ($)", "Realized PnL ($)"]:
-                    df[col] = 0.0
-                else:
-                    df[col] = "Unknown"
-                mutated = True
-                
-        if mutated:
-            df.to_csv(DB_FILE, index=False)
+                df[col] = 0.0 if col in ["Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"] else "Unknown"
         return df
-    except Exception as e:
+    except Exception:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
 def save_trade(trade_dict):
@@ -57,13 +42,13 @@ def save_trade(trade_dict):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
 
-# Safely load data with active migration guarantees
+# Load data safely
 trade_df = load_data()
 
 st.title("📊 The Premium Seller Command Center")
-st.caption("Emulating The Options Seller Trade Log Architecture with Integrated VRP Sizing and Capital Analytics.")
+st.caption("Emulating The Options Seller Trade Log Architecture with Integrated Sizing Analytics.")
 
-# --- NAVIGATION TABS ---
+# --- NATIVE HORIZONTAL TABS ---
 tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"])
 
 # ==========================================
@@ -71,24 +56,20 @@ tab1, tab2, tab3 = st.tabs(["🧮 Automated Trade Calculator", "📈 Time-Horizo
 # ==========================================
 with tab1:
     st.subheader("💡 Dynamic Position Sizing & Margin Optimizer")
-    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         ticker = st.text_input("Ticker Symbol", value="MU", key="calc_ticker").upper()
         sector = st.selectbox("Ticker Sector Allocation", ["Semiconductors", "Tech Infrastructure", "Tech Components", "Clean Energy", "Index / Macro", "Other"])
         strategy = st.selectbox("Strategy Architecture", ["Put Credit Spread (PCS)", "Cash Secured Put (CSP)", "Covered Call (CC)", "Call Debit Spread (CDS)", "Long Call / Speculative Debit"])
-        
     with col2:
         contracts = st.number_input("Number of Contracts", min_value=1, value=1, step=1)
         short_strike = st.number_input("Short Strike Price ($) [Leave 0 if none]", min_value=0.0, value=100.0, step=0.5)
         long_strike = st.number_input("Long Strike Price ($) [Leave 0 if naked]", min_value=0.0, value=95.0, step=0.5)
-        
     with col3:
         short_prem_entry = st.number_input("Short Leg Entry Premium ($)", min_value=0.00, value=1.50, step=0.05)
         long_prem_entry = st.number_input("Long Leg Entry Premium ($) [0 if naked]", min_value=0.00, value=0.50, step=0.05)
         entry_date = st.date_input("Execution Date (Today)", datetime.now())
         exp_date = st.date_input("Contract Expiration Date", datetime.now() + pd.Timedelta(days=40))
-        
     with col4:
         iv_pct = st.number_input("Implied Volatility (IV) (%)", min_value=0.0, max_value=250.0, value=45.0)
 
@@ -160,26 +141,28 @@ with tab2:
 # ==========================================
 with tab3:
     st.subheader("📜 Running Options Trade History Log")
-    
-    # 📋 DISPLAY VIEWABLE DATA SHEET
     st.markdown("### 📋 Active Master History Log Sheet")
+    
     if trade_df.empty:
         st.dataframe(pd.DataFrame(columns=["Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Capital Risked", "Net Premium ($)"]), use_container_width=True)
         st.info("No recorded trades found in history database. Input an active contract in Tab 1 to populate this sheet.")
     else:
+        # Render the open table worksheet cleanly
         presentation_df = trade_df.copy()
         badges = []
         for idx, row in presentation_df.iterrows():
-            if str(row["Status"]).strip().upper() == "OPEN":
+            status_str = str(row.get("Status", "Open")).strip().upper()
+            if status_str == "OPEN":
                 badges.append("🔵 OPEN")
-            elif float(row["Realized PnL ($)"]) >= 0:
+            elif float(row.get("Realized PnL ($)", 0.0)) >= 0:
                 badges.append("🟢 WIN")
             else:
                 badges.append("🔴 LOSS")
         presentation_df.insert(0, "📊 Performance", badges)
         
-        col_order = ["📊 Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"]
-        st.dataframe(presentation_df[col_order], use_container_width=True)
+        # Force column mapping to display correctly even if rows are duplicate tracking elements
+        available_cols = [c for c in ["📊 Performance", "Trade ID", "Ticker", "Strategy", "Status", "Entry Date", "Expiration Date", "Contracts", "Calculated DTE", "Close DTE", "Capital Risked", "Net Premium ($)", "Exit Cost ($)", "Realized PnL ($)", "ROI (%)"] if c in presentation_df.columns]
+        st.dataframe(presentation_df[available_cols], use_container_width=True)
         
         csv_data = trade_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
@@ -187,9 +170,13 @@ with tab3:
         
         # --- ORDER MANAGEMENT ENGINE ---
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
-        open_positions = trade_df[trade_df["Status"].str.strip().str.upper() == "OPEN"]
+        open_positions = trade_df[trade_df["Status"].astype(str).str.strip().str.upper() == "OPEN"]
         
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
-            list_ids = open_positions["Trade ID"].astype(str).tolist()
+            # Bulletproof List Generator
+            open_ids = open_positions["Trade ID"].astype(str).tolist()
+            open_labels = [f"Row {idx} | ID: {row['Trade ID']} | ${row['Ticker']}" for idx, row in open_positions.iterrows()]
+            
+            selected_label = st.selectbox("Identify Working Open Contract to Close Out", options=open_labels, key="close_box_selector")
