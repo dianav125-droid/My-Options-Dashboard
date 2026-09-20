@@ -60,7 +60,6 @@ st.title("📊 The Premium Seller Command Center")
 st.caption("Live Options Portfolio Log, Automated Credit Leg Component Engine, and Transaction Tracking.")
 
 # --- MASTER NAVIGATION SELECTION BOX ---
-# Using a clean sidebar dropdown selector entirely removes nested tab spacing bugs from the code structure!
 menu_choice = st.sidebar.radio("🧭 Portfolio Navigation", ["🧮 Automated Trade Calculator", "📈 Time-Horizon Analytics", "📜 Live Trade History"], index=0)
 
 # ==========================================
@@ -184,9 +183,11 @@ if menu_choice == "📜 Live Trade History":
         st.download_button(label="📥 Download Complete Master Backup (.CSV)", data=csv_data, file_name="options_trade_history.csv", mime="text/csv")
         st.markdown("---")
         
-        open_positions = trade_df[trade_df["Status"] == "Open"]
+        # --- COMPLETELY FLATTENED ORDER MANAGEMENT ENGINE ---
         st.markdown("### ⚙️ Order Management Engine (Close Working Positions)")
+        open_positions = trade_df[trade_df["Status"] == "Open"]
         
         if open_positions.empty:
             st.success("🟢 All logged trades are currently closed! No active exposure running.")
         else:
+            open_ids = open_positions["Trade ID"].tolist()
